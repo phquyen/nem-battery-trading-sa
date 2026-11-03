@@ -16,4 +16,4 @@ Feature's description:
 2. Timestamps are in market time, not Adelaide time. Market time is UTC+10 all year round. Adelaide is UTC+9:30 (winter) or UTC+10:30 (summer). Timestamps are kept in market time to avoid misalignment.
 3. Only data after 1 October 2021 is used. On that date the NEM moved from 30-minute to 5-minute settlement. Using only post-change data keeps every price at the same granularity.
 4. Prices can be negative. The market price floor is −$1,000/MWh. Negative prices are common in SA at midday, when solar and wind supply exceeds demand.
-5. TOTALDEMAND excludes rooftop solar. Household solar reduces the electricity drawn from the grid, so midday demand appears low.
+5. TOTALDEMAND excludes rooftop solar. Household solar reduces the electricity drawn from the grid, so midday demand appears low. Can be negative (min -311MW, 1,222 intervals <= 0) when rooftop solar exceeds SA consumption and the surplus is exported. That is not error or outliers.
