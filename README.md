@@ -1,6 +1,6 @@
 # Intelligent Battery Trading in South Australia
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://nem-battery-trading-sa-adl.streamlit.app/) &nbsp;**← try the live dashboard, no install needed**
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://nem-battery-trading-sa-adl.streamlit.app/)
 
 **Probabilistic electricity price forecasting, risk modelling and battery dispatch optimisation on five years of real AEMO data.**
 
@@ -104,8 +104,6 @@ LightGBM is **11.4% more accurate** than the best baseline (9.4% on validation, 
 | No trade | $0 | — | — | — |
 
 ![Cumulative profit by strategy, test year](reports/figures/o2_test_cumulative_profit.png)
-
-> **Check these results yourself in the [live dashboard](https://nem-battery-trading-sa-adl.streamlit.app/):** pick any test-year day to see the price forecast and what the battery did each half-hour. For example, 26 Jan 2026 is ML's best day and 22 Jun 2026 is a price spike every forecast missed.
 
 **Honest reading of the result:**
 
