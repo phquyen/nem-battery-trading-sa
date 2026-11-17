@@ -152,4 +152,3 @@ src/nem_battery/ download, load, features, evaluate, battery
 
 ---
 
-*Built by Quinn Pham, Master of Data Science, University of Adelaide.*
