@@ -1,4 +1,4 @@
-﻿"""Streamlit dashboard: Intelligent Battery Trading in South Australia.
+"""Streamlit dashboard: Intelligent Battery Trading in South Australia.
 
 Reads ONLY the precomputed files in data/dashboard/ (made by
 scripts/build_dashboard_data.py). No model is trained here.
@@ -26,6 +26,11 @@ STRATEGY_ORDER = list(COLORS)
 TRADEABLE = ["Timing-robust ML", "LightGBM forecast", "Typical-day rule"]
 NEUTRAL = "#8a8985"
 INK = "#52514e"
+# Single-day charts use "hours since midnight" (a plain number, 0-24) instead of
+# datetimes, so the browser can never shift them into the viewer's time zone.
+HOUR_X = dict(title="Time of day (NEM market time, UTC+10)", scale=alt.Scale(domain=[0, 24], nice=False),
+              axis=alt.Axis(values=list(range(0, 25, 3)),
+                            labelExpr="(datum.value < 10 ? '0' : '') + datum.value + ':00'"))
 
 # Facts not stored in the dashboard files were checked against the 5-minute
 # AEMO data (data/interim) when the dashboard was built.
@@ -74,11 +79,12 @@ def load():
 def summary_table(daily: pd.DataFrame) -> pd.DataFrame:
     g = daily.groupby("strategy")["profit"]
     t = pd.DataFrame({
-        "Total profit": g.sum(),
+        "Profit": g.sum(),
         "Worst day": g.min(),
         "Losing days": g.apply(lambda s: (s < 0).mean()),
     }).reindex(STRATEGY_ORDER)
-    t.insert(1, "Share of perfect foresight", t["Total profit"] / t.loc["Perfect foresight", "Total profit"])
+    t.insert(1, "% of perfect", t["Profit"] / t.loc["Perfect foresight", "Profit"])
+    t.index.name = "Strategy"
     return t
 
 
@@ -103,7 +109,7 @@ def hover_lines(df, x, y, series, x_title, y_title, title, names, dash=None, x_f
         x=x_enc,
         y=alt.Y(f"{y}:Q", title=y_title),
         color=alt.Color(f"{series}:N", scale=color_scale(names), sort=list(names),
-                        legend=alt.Legend(orient="bottom", title=None)),
+                        legend=alt.Legend(orient="bottom", title=None, labelLimit=0)),
     )
     line_kw = {"strokeWidth": 2}
     lines = base.mark_line(**line_kw)
@@ -120,15 +126,15 @@ def hover_lines(df, x, y, series, x_title, y_title, title, names, dash=None, x_f
 
 
 # ---------- page ----------
-st.set_page_config(page_title="SA Battery Trading", page_icon="ðŸ”‹", layout="wide")
+st.set_page_config(page_title="SA Battery Trading", page_icon="🔋", layout="wide")
 prices, schedules, daily = load()
 summary = summary_table(daily)
-ml_total = summary.loc["Timing-robust ML", "Total profit"]
-rule_total = summary.loc["Typical-day rule", "Total profit"]
+ml_total = summary.loc["Timing-robust ML", "Profit"]
+rule_total = summary.loc["Typical-day rule", "Profit"]
 
 st.title("Intelligent Battery Trading in South Australia")
 st.caption("Day-ahead electricity price forecasting and battery dispatch on real AEMO market data "
-           "(region SA1). Results are for a held-out test year, Oct 2025 â€“ Sep 2026.")
+           "(region SA1). Results are for a held-out test year, Oct 2025 – Sep 2026.")
 
 st.subheader("About this project")
 st.markdown(
@@ -141,7 +147,7 @@ st.markdown(
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Timing-robust ML profit", f"${ml_total:,.0f}")
 c2.metric("vs typical-day rule", f"${rule_total:,.0f}", f"+{ml_total / rule_total - 1:.1%} for ML")
-c3.metric("Share of perfect foresight", f"{summary.loc['Timing-robust ML', 'Share of perfect foresight']:.1%}")
+c3.metric("Share of perfect foresight", f"{summary.loc['Timing-robust ML', '% of perfect']:.1%}")
 c4.metric("Forecast error (MAE), LightGBM", f"${mae_table(prices).iloc[0, 0]:.2f}/MWh")
 
 with st.expander("How to read this dashboard"):
@@ -151,11 +157,11 @@ with st.expander("How to read this dashboard"):
 - **The battery** can charge or discharge up to **1 MW** at a time and store **2 MWh**, about two hours of full output.
   It starts and ends every day empty.
 - **Each strategy plans the whole next day at midnight**, then is paid at the prices that actually happened:
-  - **Timing-robust ML**: plans with a machine-learning (LightGBM) forecast, smoothed over Â±30 minutes so the plan does not bet everything on one exact half-hour.
+  - **Timing-robust ML**: plans with a machine-learning (LightGBM) forecast, smoothed over ±30 minutes so the plan does not bet everything on one exact half-hour.
   - **LightGBM forecast**: plans with the raw machine-learning forecast.
   - **Typical-day rule**: plans with the median price of each half-hour from past years (a simple baseline).
   - **Perfect foresight** (grey dashed line): plans with the *actual* prices. This is impossible in practice and shows the most that could have been earned.
-- **Share of perfect foresight** is how much of that maximum each strategy captured.
+- **% of perfect** (share of perfect foresight) is how much of that maximum each strategy captured.
 - **MAE** (mean absolute error) is the average size of a forecast's mistake in $/MWh. Lower is better.
 - Hover over any chart to see exact values. Use **Explore a single day** to see what the battery did, half-hour by half-hour.
         """
@@ -171,14 +177,14 @@ with left:
     dash = alt.Scale(domain=STRATEGY_ORDER, range=[[1, 0], [1, 0], [1, 0], [6, 4]])
     st.altair_chart(
         hover_lines(cum, "date", "cumulative", "strategy", "Date", "Cumulative profit ($)",
-                    "Cumulative profit by strategy, Oct 2025 â€“ Sep 2026", STRATEGY_ORDER, dash=dash),
+                    "Cumulative profit by strategy, Oct 2025 – Sep 2026", STRATEGY_ORDER, dash=dash),
         width="stretch",
     )
 
 with right:
     st.markdown("**Battery profit, test year**")
     st.dataframe(
-        summary.style.format({"Total profit": money, "Share of perfect foresight": "{:.1%}",
+        summary.style.format({"Profit": money, "% of perfect": "{:.1%}",
                               "Worst day": money, "Losing days": "{:.1%}"}),
         width="stretch",
     )
@@ -192,18 +198,19 @@ monthly = (daily.assign(month=daily["date"].dt.to_period("M").dt.to_timestamp())
 monthly = (monthly["Timing-robust ML"] - monthly["Typical-day rule"]).rename("advantage").reset_index()
 monthly["Who earned more"] = np.where(monthly["advantage"] >= 0, "Timing-robust ML", "Typical-day rule")
 n_win = int((monthly["advantage"] > 0).sum())
+monthly["label"] = monthly["month"].dt.strftime("%b %Y")  # text labels: one per bar, no time-zone shifts
 st.altair_chart(
-    alt.Chart(monthly).mark_bar(cornerRadiusEnd=4, size=28).encode(
-        x=alt.X("month:T", title="Month", axis=alt.Axis(format="%b %Y")),
-        y=alt.Y("advantage:Q", title="ML profit minus rule profit ($)"),
+    alt.Chart(monthly).mark_bar(cornerRadiusEnd=4).encode(
+        x=alt.X("label:O", title="Month", sort=list(monthly["label"]), axis=alt.Axis(labelAngle=0)),
+        y=alt.Y("advantage:Q", title="Difference ($)"),
         color=alt.Color("Who earned more:N",
                         scale=alt.Scale(domain=["Timing-robust ML", "Typical-day rule"],
                                         range=[COLORS["Timing-robust ML"], COLORS["Typical-day rule"]]),
                         legend=alt.Legend(orient="bottom")),
-        tooltip=[alt.Tooltip("month:T", title="Month", format="%b %Y"),
+        tooltip=[alt.Tooltip("label:O", title="Month"),
                  alt.Tooltip("advantage:Q", title="ML minus rule ($)", format=",.0f")],
-    ).properties(title=f"Monthly advantage of timing-robust ML over the typical-day rule "
-                       f"(ML ahead in {n_win} of {len(monthly)} months)", height=280),
+    ).properties(title=f"Monthly profit difference: timing-robust ML minus typical-day rule "
+                       f"(ML ahead in {n_win} of {len(monthly)} months)", height=320),
     width="stretch",
 )
 st.caption("Much of the year's gap comes from January 2026, a month with price-cap events. "
@@ -236,35 +243,39 @@ for col, name in zip(m[:4], STRATEGY_ORDER):
 m[4].metric("Highest half-hour price", f"{money(d_daily['day_max'].iloc[0])}/MWh")
 
 d = schedules[(schedules["date"] == day_ts) & (schedules["strategy"] == strategy)].copy()
+d["hour"] = d["slot"] * 0.5               # slot 27 -> 13.5 hours after midnight
+d["hour_end"] = d["hour"] + 0.5
+d["time"] = d["interval_start"].dt.strftime("%H:%M")  # text label for tooltips
 
 # Chart 1: actual price vs the prices the plan was built on
+cols = ["hour", "time"]
 if strategy == "Perfect foresight":
-    plot = d[["interval_start", "actual_price"]].rename(columns={"actual_price": "price"}).assign(series="Actual price")
+    plot = d[cols + ["actual_price"]].rename(columns={"actual_price": "price"}).assign(series="Actual price")
     names, rng, dash_rng = ["Actual price"], [INK], [[1, 0]]
 else:
     plan_name = f"Price used for planning ({strategy})"
     plot = pd.concat([
-        d[["interval_start", "actual_price"]].rename(columns={"actual_price": "price"}).assign(series="Actual price"),
-        d[["interval_start", "plan_price"]].rename(columns={"plan_price": "price"}).assign(series=plan_name),
+        d[cols + ["actual_price"]].rename(columns={"actual_price": "price"}).assign(series="Actual price"),
+        d[cols + ["plan_price"]].rename(columns={"plan_price": "price"}).assign(series=plan_name),
     ])
     names, rng, dash_rng = ["Actual price", plan_name], [INK, COLORS[strategy]], [[1, 0], [6, 4]]
 
-nearest = alt.selection_point(nearest=True, on="pointerover", fields=["interval_start"], empty=False)
+nearest = alt.selection_point(nearest=True, on="pointerover", fields=["hour"], empty=False)
 base = alt.Chart(plot).encode(
-    x=alt.X("interval_start:T", title="Time of day (market time, UTC+10)", axis=alt.Axis(format="%H:%M")),
+    x=alt.X("hour:Q", **HOUR_X),
     y=alt.Y("price:Q", title="Price ($/MWh)"),
-    color=alt.Color("series:N", scale=alt.Scale(domain=names, range=rng), legend=alt.Legend(orient="bottom", title=None)),
+    color=alt.Color("series:N", scale=alt.Scale(domain=names, range=rng), legend=alt.Legend(orient="bottom", title=None, labelLimit=0)),
 )
 price_chart = (
     base.mark_line(strokeWidth=2, interpolate="step-after").encode(
         strokeDash=alt.StrokeDash("series:N", scale=alt.Scale(domain=names, range=dash_rng), legend=None))
     + base.mark_point(size=60, filled=True).encode(
         opacity=alt.condition(nearest, alt.value(1), alt.value(0)),
-        tooltip=[alt.Tooltip("interval_start:T", title="Half-hour starting", format="%H:%M"),
+        tooltip=[alt.Tooltip("time:N", title="Half-hour starting"),
                  alt.Tooltip("series:N", title="Series"),
                  alt.Tooltip("price:Q", title="$/MWh", format=",.2f")]).add_params(nearest)
-    + alt.Chart(plot).mark_rule(color=NEUTRAL).encode(x="interval_start:T").transform_filter(nearest)
-).properties(title=f"Half-hourly price on {day_ts:%d %b %Y}: actual vs the prices the plan used", height=300)
+    + alt.Chart(plot).mark_rule(color=NEUTRAL).encode(x="hour:Q").transform_filter(nearest)
+).properties(title=f"Half-hourly price on {day_ts:%d %b %Y}: actual vs the prices the plan used", height=380)
 st.altair_chart(price_chart, width="stretch")
 
 # Chart 2: what the battery did
@@ -276,20 +287,22 @@ if d.empty:
     st.write(f"The **{strategy}** plan did not trade on this day.")
 else:
     st.altair_chart(
-        alt.Chart(d).mark_bar(cornerRadiusEnd=4).encode(
-            x=alt.X("interval_start:T", title="Time of day (market time, UTC+10)", axis=alt.Axis(format="%H:%M")),
-            y=alt.Y("power_mw:Q", title="Battery power (MW): + selling, âˆ’ buying", scale=alt.Scale(domain=[-1.05, 1.05])),
+        alt.Chart(d).mark_bar(cornerRadiusEnd=4, stroke=None).encode(
+            x=alt.X("hour:Q", **HOUR_X),
+            x2="hour_end:Q",  # each bar spans exactly its half-hour
+            y=alt.Y("power_mw:Q", title="Power (MW)", scale=alt.Scale(domain=[-1.05, 1.05])),
+            y2=alt.datum(0),  # bars grow from 0 MW
             color=alt.Color("Action:N",
                             scale=alt.Scale(domain=["Charging (buying)", "Discharging (selling)"],
                                             range=[NEUTRAL, COLORS[strategy] if strategy != "Perfect foresight" else INK]),
-                            legend=alt.Legend(orient="bottom", title=None)),
-            tooltip=[alt.Tooltip("interval_start:T", title="Half-hour starting", format="%H:%M"),
+                            legend=alt.Legend(orient="bottom", title=None, labelLimit=0)),
+            tooltip=[alt.Tooltip("time:N", title="Half-hour starting"),
                      alt.Tooltip("Action:N"),
                      alt.Tooltip("power_mw:Q", title="MW", format=".2f"),
                      alt.Tooltip("soc_mwh:Q", title="Stored after (MWh)", format=".2f"),
                      alt.Tooltip("actual_price:Q", title="Actual price ($/MWh)", format=",.2f"),
                      alt.Tooltip("revenue:Q", title="Cash this half-hour ($)", format=",.0f")],
-        ).properties(title=f"What the battery did: {strategy} plan", height=260),
+        ).properties(title=f"What the battery did ({strategy} plan): bars above 0 = selling, below 0 = buying", height=320),
         width="stretch",
     )
     st.caption("Each bar is one half-hour (1 MW for 30 minutes = 0.5 MWh). Profit is paid at the actual price.")
@@ -310,4 +323,4 @@ st.markdown(
 - The test year was used **once**, for final evaluation only. No model or strategy was tuned on it.
     """
 )
-st.caption("Data Â© AEMO, used under the AEMO Copyright Permissions Notice. Built with Python, LightGBM, SciPy and Streamlit.")
+st.caption("Data © AEMO, used under the AEMO Copyright Permissions Notice. Built with Python, LightGBM, SciPy and Streamlit.")

@@ -4,6 +4,14 @@
 
 > **Headline result (held-out test year, Oct 2025 – Sep 2026):** a LightGBM forecast combined with a timing-robust linear-programming optimiser earned **$100,716** for a simulated 1 MW / 2 MWh battery, **47.5% more** than a typical-day rule ($68,292), with a smaller worst day (−$241 vs −$924) and fewer losing days (11.8% vs 17.5%).
 
+## Live demo
+
+**[Open the interactive dashboard →](https://nem-battery-trading-sa-adl.streamlit.app/)**
+
+Explore test-year results, compare strategies, and replay any day half-hour by half-hour (including the price-cap days of January and June 2026).
+
+[![Dashboard screenshot](reports/figures/dashboard.png)](https://nem-battery-trading-sa-adl.streamlit.app/)
+
 ---
 
 ## 1. Business problem
@@ -33,7 +41,7 @@ But future prices are uncertain, the battery has physical limits, and a wrong de
 
 Data © AEMO, used under the AEMO Copyright Permissions Notice. Raw data is not committed to this repository; see *Reproduce* below.
 
-Key data decisions are documented in [`docs/decision_log.md`](docs/decision_log.md), and column definitions in [`docs/data_dictionary.md`](docs/data_dictionary.md).
+Key data decisions are documented in [`docs/decision_log.md`](docs/decision_log.md), and column definitions in [`docs/dictionary.md`](docs/dictionary.md).
 
 ## 3. What the data shows
 
@@ -136,17 +144,27 @@ python src/nem_battery/download.py
 Then run the notebooks in order (`01` → `10`). To regenerate the README charts:
 
 ```bash
-python scripts/make_figures.py
+python report/figures.py
+```
+
+To rebuild the dashboard data and run the dashboard locally:
+
+```bash
+python scripts/build_dashboard_data.py   # re-creates the final model, saves data/dashboard/*.parquet
+streamlit run app/streamlit_app.py       # the app only reads those files; it never trains models
 ```
 
 ## Repository structure
 
 ```
+app/             Streamlit dashboard (streamlit_app.py) + its minimal requirements.txt
 data/            raw / interim / processed (not committed)
+data/dashboard/  small precomputed files read by the dashboard (committed)
 docs/            decision log, data dictionary, market background
 notebooks/       01–10: download, validation, EDA, features, models, uncertainty, battery, final test
+report/          figures.py: regenerates the README charts
 reports/figures/ charts used in this README
-scripts/         make_figures.py: regenerates the README charts
+scripts/         build_dashboard_data.py: precomputes the dashboard data
 src/nem_battery/ download, load, features, evaluate, battery
 ```
 
