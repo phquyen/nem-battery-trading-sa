@@ -66,3 +66,20 @@ def realised_profit(schedule: pd.DataFrame, actual_prices, spec: BatterySpec = B
     energy_net = (schedule["discharge_mw"] - schedule["charge_mw"]).to_numpy() * spec.dt_h
     degradation = spec.degradation_cost * schedule["discharge_mw"].sum() * spec.dt_h
     return float((p * energy_net).sum() - degradation)
+
+def simulate(df: pd.DataFrame, plan_col: str | None, plan_spec: BatterySpec,
+             pay_spec: BatterySpec, target: str = "rrp") -> pd.DataFrame:
+    """Plan each day with `plan_col` prices (None = actual = perfect foresight),
+    then pay the schedule at ACTUAL prices."""
+    rows = []
+    for date, day in df.groupby("date"):
+        day = day.sort_values("slot")
+        actual = day[target].to_numpy()
+        plan_prices = actual if plan_col is None else day[plan_col].to_numpy()
+        sched = optimise_day(plan_prices, plan_spec)
+        rows.append({
+            "date": date,
+            "profit": realised_profit(sched, actual, pay_spec),
+            "mwh_out": sched["discharge_mw"].sum() * pay_spec.dt_h,
+        })
+    return pd.DataFrame(rows)
